@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WhatsApp Real-Time Enterprise</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <style>
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-thumb { background-color: #374248; border-radius: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background-color: #111a21; }
+        .attachment-popup { transform: scale(0.9) translateY(20px); opacity: 0; pointer-events: none; transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .attachment-popup.active { transform: scale(1) translateY(0); opacity: 1; pointer-events: auto; }
+        .modal-overlay { opacity: 0; pointer-events: none; transition: all 0.25s ease-in-out; }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+    </style>
+</head>
+<body class="w-full h-full flex items-center justify-center font-sans select-none antialiased text-gray-200">
+
+<div class="absolute top-0 left-0 w-full h-[125px] bg-[#00a884] z-0 hidden md:block"></div>
+
+<div id="auth-container" class="relative z-10 bg-[#222e35] p-8 rounded-lg shadow-2xl w-full max-w-md mx-4 border border-gray-700/30">
+    <div class="flex flex-col items-center mb-6">
+        <i class="fab fa-whatsapp text-6xl text-[#00a884] mb-2 drop-shadow-md"></i>
+        <h2 id="auth-title" class="text-2xl font-semibold tracking-wide">Sign in to WhatsApp</h2>
+    </div>
+
+    <div class="space-y-4">
+        <div id="name-field" class="hidden">
+            <label class="block text-xs text-gray-400 mb-1 uppercase tracking-wider">Full Name</label>
+            <input type="text" id="auth-name" class="w-full bg-[#2a3942] border border-transparent focus:border-[#00a884] outline-none rounded p-3 text-white transition duration-150" placeholder="Amit Sharma">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-400 mb-1 uppercase tracking-wider">Mobile Number</label>
+            <input type="text" id="auth-mobile" class="w-full bg-[#2a3942] border border-transparent focus:border-[#00a884] outline-none rounded p-3 text-white transition duration-150" placeholder="9024414017">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-400 mb-1 uppercase tracking-wider">Password</label>
+            <input type="password" id="auth-password" class="w-full bg-[#2a3942] border border-transparent focus:border-[#00a884] outline-none rounded p-3 text-white transition duration-150" placeholder="••••••••">
+        </div>
+        <button id="auth-btn" type="button" class="w-full bg-[#00a884] hover:bg-[#008f70] text-[#111a21] font-bold py-3 rounded-lg transition duration-200 shadow-md mt-2 tracking-wide">Log In</button>
+    </div>
+
+    <p class="text-center text-sm text-gray-400 mt-6">
+        <span id="auth-toggle-text">Don't have an account?</span>
+        <button id="auth-toggle-btn" type="button" class="text-[#00a884] hover:underline focus:outline-none ml-1 font-medium">Register Now</button>
+    </p>
+</div>
+
+<div id="app-container" class="hidden relative z-10 w-full h-full md:h-[95vh] md:w-[98vw] lg:w-[90vw] max-w-[1700px] bg-[#222e35] flex shadow-2xl overflow-hidden md:rounded-xl border border-gray-700/20">
+
+    <aside id="sidebar-panel" class="w-full md:w-[35%] lg:w-[30%] min-w-[340px] border-r border-[#2f3b43] flex flex-col h-full bg-[#111a21]">
+        <header class="h-[65px] bg-[#202c33] px-4 flex items-center justify-between shrink-0 border-b border-gray-800/40">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-[#00a884] text-[#111a21] flex items-center justify-center rounded-full font-bold uppercase text-lg shadow" id="user-avatar">-</div>
+                <span class="text-gray-200 font-medium truncate max-w-[150px]" id="user-display-name">Connecting...</span>
+            </div>
+            <div class="flex space-x-5 text-gray-400 text-lg">
+                <button type="button" class="hover:text-gray-200"><i class="fas fa-circle-notch"></i></button>
+                <button type="button" class="hover:text-gray-200"><i class="fas fa-comment-alt"></i></button>
+                <button type="button" id="logout-btn" class="hover:text-red-400 transition" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
+            </div>
+        </header>
+
+        <div class="p-3 bg-[#1c272e] border-b border-[#222e35] space-y-2 shrink-0">
+            <p class="text-[11px] font-semibold text-[#00a884] uppercase tracking-wider">Add New Contact</p>
+            <div class="flex space-x-2">
+                <input type="text" id="contact-mobile-input" placeholder="Enter mobile number" class="flex-1 bg-[#2a3942] text-xs text-gray-200 placeholder-gray-500 outline-none rounded p-2.5 border border-transparent focus:border-[#00a884]">
+                <button type="button" id="add-contact-btn" class="bg-[#00a884] hover:bg-[#008f70] text-[#111a21] text-xs font-bold px-4 rounded transition flex items-center space-x-1 shrink-0">
+                    <i class="fas fa-plus"></i> <span>Add</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="px-4 py-2 bg-[#111a21] text-[11px] text-gray-400 border-b border-[#222e35]/40 font-semibold tracking-wider uppercase shrink-0">Conversations</div>
+        <div class="flex-1 overflow-y-auto divide-y divide-gray-800/40" id="users-list"></div>
+    </aside>
+
+    <main id="chat-panel" class="hidden md:flex flex-1 flex-col h-full bg-[#0b141a] relative w-full min-w-0 overflow-hidden">
+
+        <div id="chat-welcome" class="absolute inset-0 bg-[#222e35] flex flex-col items-center justify-center text-center p-8 z-20 transition-all">
+            <div class="max-w-md flex flex-col items-center">
+                <i class="fab fa-whatsapp text-[130px] text-[#2f3b43] mb-6 drop-shadow-lg"></i>
+                <h1 class="text-3xl text-gray-200 font-light mb-3">WhatsApp Real-Time</h1>
+                <p class="text-gray-400 text-sm leading-relaxed">Send high-fidelity data objects and attachment buffers instantly without any screen reloads.</p>
+            </div>
+            <div class="absolute bottom-10 text-gray-500 text-xs flex items-center tracking-wide font-medium">
+                <i class="fas fa-lock mr-1.5 text-[10px] text-[#00a884]"></i> End-To-End Signal Transmission Guaranteed
+            </div>
+        </div>
+
+        <header class="h-[65px] bg-[#202c33] px-4 flex items-center justify-between z-10 shadow border-b border-gray-800/40 shrink-0">
+            <div class="flex items-center space-x-3 min-w-0">
+                <button type="button" id="mobile-back-btn" class="text-gray-400 hover:text-gray-200 text-xl pr-2"><i class="fas fa-arrow-left"></i></button>
+                <div class="w-10 h-10 bg-emerald-600 text-white flex items-center justify-center rounded-full font-bold uppercase text-lg shadow shrink-0" id="active-chat-avatar">-</div>
+                <div class="min-w-0">
+                    <h3 class="text-gray-200 font-medium text-sm truncate" id="active-chat-name">Target Client</h3>
+                    <span class="text-[11px] text-emerald-400 flex items-center"><span class="w-1.5 h-1.5 bg-emerald-400 rounded-full inline-block mr-1 animate-pulse"></span>online</span>
+                </div>
+            </div>
+            <div class="flex space-x-5 text-gray-400 text-lg shrink-0">
+                <button type="button" class="hover:text-gray-200"><i class="fas fa-search"></i></button>
+                <button type="button" class="hover:text-gray-200"><i class="fas fa-ellipsis-v"></i></button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto px-4 md:px-10 py-6 space-y-2 bg-[#0b141a] relative" id="chat-messages-box" style="background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); background-blend-mode: overlay; opacity: 0.98;"></div>
+
+        <div id="attachment-drawer" class="attachment-popup absolute bottom-[80px] left-[20px] bg-[#233138] p-3 rounded-xl shadow-2xl flex flex-col space-y-2 z-30 border border-gray-700/40">
+            <button type="button" id="pop-img-btn" class="flex items-center space-x-3 hover:bg-[#182229] p-2.5 rounded-lg transition text-left text-sm w-44">
+                <i class="fas fa-image text-purple-400 text-lg w-6 text-center"></i> <span class="font-medium">Photos & Videos</span>
+            </button>
+            <button type="button" id="pop-pdf-btn" class="flex items-center space-x-3 hover:bg-[#182229] p-2.5 rounded-lg transition text-left text-sm w-44">
+                <i class="fas fa-file-pdf text-blue-400 text-lg w-6 text-center"></i> <span class="font-medium">Document (PDF)</span>
+            </button>
+        </div>
+
+        <input type="file" id="media-image-injector" accept="image/*" class="hidden">
+        <input type="file" id="media-pdf-injector" accept="application/pdf" class="hidden">
+
+        <footer class="h-[70px] bg-[#202c33] px-4 flex items-center space-x-3 z-10 border-t border-gray-800/30 shrink-0 w-full relative">
+            <div class="flex space-x-3 text-gray-400 text-xl shrink-0">
+                <button type="button" class="hover:text-gray-200 hidden sm:inline-block"><i class="far fa-laugh"></i></button>
+                <button type="button" id="attachment-trigger-btn" class="hover:text-emerald-400 transition duration-150"><i class="fas fa-plus"></i></button>
+            </div>
+
+            <div class="flex-1 flex items-center m-0 min-w-0 h-full py-2">
+                <input type="text" id="chat-input" placeholder="Type a message" autocomplete="off" class="w-full bg-[#2a3942] text-sm text-gray-200 placeholder-gray-500 outline-none rounded-xl h-11 px-4 min-w-0 border border-transparent focus:border-emerald-600 transition">
+                <button type="button" id="submit-msg-btn" class="text-[#00a884] hover:text-[#008f70] text-xl ml-3 flex items-center justify-center shrink-0 w-11 h-11 rounded-full bg-[#111a21] shadow hover:scale-105 transition transform">
+                    <i class="fas fa-paper-plane text-base"></i>
+                </button>
+            </div>
+        </footer>
+    </main>
+</div>
+
+<div id="media-modal-view" class="modal-overlay fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
+    <div class="absolute top-4 right-4 flex items-center space-x-4">
+        <a id="modal-download-link" href="#" download="" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium text-sm shadow flex items-center space-x-2 transition">
+            <i class="fas fa-download"></i> <span>Download File</span>
+        </a>
+        <button type="button" id="modal-close-btn" class="text-white hover:text-red-400 text-3xl focus:outline-none transition p-2">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    <div class="w-full h-full max-w-[90vw] max-h-[80vh] flex items-center justify-center mt-12">
+        <img id="modal-img-node" src="" class="hidden max-w-full max-h-full rounded-lg object-contain shadow-2xl">
+        <object id="modal-pdf-node" data="" type="application/pdf" class="hidden w-full h-full rounded-lg bg-white shadow-2xl"></object>
+    </div>
+    <div id="modal-caption-node" class="text-center mt-4 text-sm text-gray-300 font-medium px-4 max-w-xl truncate"></div>
+</div>
+
+<script>
+    const API_BASE = "https://jgqw00mq-4000.inc1.devtunnels.ms"; 
+
+    const socket = io(API_BASE, {
+        transports: ['websocket'],
+        upgrade: false,
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000
+    });
+
+    let currentUser = JSON.parse(localStorage.getItem('whatsapp_user')) || null;
+    let activeChatPartner = null;
+    let RENDERING_TRACKER_IDS = new Set();
+
+    // DOM Target Selectors Mapping Securely
+    const authContainer = document.getElementById('auth-container');
+    const appContainer = document.getElementById('app-container');
+    const authTitle = document.getElementById('auth-title');
+    const nameField = document.getElementById('name-field');
+    const authBtn = document.getElementById('auth-btn');
+    const authToggleBtn = document.getElementById('auth-toggle-btn');
+    const authToggleText = document.getElementById('auth-toggle-text');
+    const authName = document.getElementById('auth-name');
+    const authMobile = document.getElementById('auth-mobile');
+    const authPassword = document.getElementById('auth-password');
+    const sidebarPanel = document.getElementById('sidebar-panel');
+    const chatPanel = document.getElementById('chat-panel');
+    const mobileBackBtn = document.getElementById('mobile-back-btn');
+    const userAvatar = document.getElementById('user-avatar');
+    const userDisplayName = document.getElementById('user-display-name');
+    const usersList = document.getElementById('users-list');
+    const logoutBtn = document.getElementById('logout-btn');
+    const contactMobileInput = document.getElementById('contact-mobile-input');
+    const addContactBtn = document.getElementById('add-contact-btn');
+    const chatMessagesBox = document.getElementById('chat-messages-box');
+    const attachmentDrawer = document.getElementById('attachment-drawer');
+    const attachmentTriggerBtn = document.getElementById('attachment-trigger-btn');
+    const chatInput = document.getElementById('chat-input');
+    const submitMsgBtn = document.getElementById('submit-msg-btn');
+    
+    const activeChatName = document.getElementById('active-chat-name');
+    const activeChatAvatar = document.getElementById('active-chat-avatar');
+    const chatWelcome = document.getElementById('chat-welcome'); 
+
+    const mediaModalView = document.getElementById('media-modal-view');
+    const modalCloseBtn = document.getElementById('modal-close-btn');
+    const modalDownloadLink = document.getElementById('modal-download-link');
+    const modalImgNode = document.getElementById('modal-img-node');
+    const modalPdfNode = document.getElementById('modal-pdf-node');
+    const modalCaptionNode = document.getElementById('modal-caption-node');
+
+    let isLoginView = true;
+
+    if (attachmentTriggerBtn) {
+        attachmentTriggerBtn.addEventListener('click', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            if(attachmentDrawer) attachmentDrawer.classList.toggle('active');
+            attachmentTriggerBtn.classList.toggle('rotate-45');
+        });
+    }
+
+    document.addEventListener('click', () => {
+        if(attachmentDrawer) attachmentDrawer.classList.remove('active');
+        if(attachmentTriggerBtn) attachmentTriggerBtn.classList.remove('rotate-45');
+    });
+
+    const popImg = document.getElementById('pop-img-btn');
+    if (popImg) {
+        popImg.addEventListener('click', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            document.getElementById('media-image-injector').click();
+            if(attachmentDrawer) attachmentDrawer.classList.remove('active');
+            if(attachmentTriggerBtn) attachmentTriggerBtn.classList.remove('rotate-45');
+        });
+    }
+
+    const popPdf = document.getElementById('pop-pdf-btn');
+    if (popPdf) {
+        popPdf.addEventListener('click', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            document.getElementById('media-pdf-injector').click();
+            if(attachmentDrawer) attachmentDrawer.classList.remove('active');
+            if(attachmentTriggerBtn) attachmentTriggerBtn.classList.remove('rotate-45');
+        });
+    }
+
+    document.getElementById('media-image-injector').addEventListener('change', function(e){ processFileCapture(this, 'image'); });
+    document.getElementById('media-pdf-injector').addEventListener('change', function(e){ processFileCapture(this, 'pdf'); });
+
+    function processFileCapture(element, type) {
+        const file = element.files[0];
+        if (!file || !activeChatPartner || !currentUser) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const base64Data = e.target.result;
+            const generatedSharedId = 'id_file_' + Date.now() + Math.random().toString(36).substr(2, 4);
+
+            const filePacket = {
+                sender: String(currentUser.mobile).trim(),
+                receiver: String(activeChatPartner.mobile).trim(),
+                message: "",
+                fileData: base64Data,
+                fileType: type,
+                fileName: file.name,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                id: generatedSharedId
+            };
+
+            appendMessageBubble(filePacket);
+            socket.emit('sendPrivateMessage', filePacket);
+        };
+        reader.readAsDataURL(file);
+        element.value = "";
+    }
+
+    window.openMediaLightbox = function(msgId, type) {
+        const targetTargetNode = document.querySelector(`[data-bubble-id="${msgId}"]`);
+        if (!targetTargetNode) return;
+
+        const srcData = targetTargetNode.getAttribute('data-raw-stream');
+        const filename = targetTargetNode.getAttribute('data-filename') || 'File';
+
+        if(modalImgNode) modalImgNode.classList.add('hidden');
+        if(modalPdfNode) modalPdfNode.classList.add('hidden');
+        if(modalCaptionNode) modalCaptionNode.innerText = filename;
+        if(modalDownloadLink) {
+            modalDownloadLink.href = srcData;
+            modalDownloadLink.download = filename;
+        }
+
+        if (type === 'image' && modalImgNode) {
+            modalImgNode.src = srcData;
+            modalImgNode.classList.remove('hidden');
+        } else if (type === 'pdf' && modalPdfNode) {
+            modalPdfNode.data = srcData;
+            modalPdfNode.classList.remove('hidden');
+        }
+
+        if(mediaModalView) mediaModalView.classList.add('active');
+    };
+
+    if (modalCloseBtn) {
+        modalCloseBtn.addEventListener('click', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            if(mediaModalView) mediaModalView.classList.remove('active');
+            if(modalImgNode) modalImgNode.src = "";
+            if(modalPdfNode) modalPdfNode.data = "";
+        });
+    }
+
+    // ================= GRAPHICAL ELEMENT RENDER ENGINE =================
+    function appendMessageBubble(msg) {
+        if (!chatMessagesBox || !msg || !msg.id) return;
+
+        if (RENDERING_TRACKER_IDS.has(msg.id)) return;
+        RENDERING_TRACKER_IDS.add(msg.id);
+
+        const isSentByMe = String(msg.sender).trim() === String(currentUser.mobile).trim();
+        const msgRow = document.createElement('div');
+        msgRow.className = `flex w-full mb-2 ${isSentByMe ? 'justify-end' : 'justify-start'}`;
+
+        const bubbleStyle = isSentByMe
+            ? 'bg-[#005c4b] text-[#e9edef] rounded-tl-lg rounded-bl-lg rounded-br-lg shadow border border-emerald-700/10'
+            : 'bg-[#202c33] text-[#e9edef] rounded-tr-lg rounded-bl-lg rounded-br-lg shadow border border-gray-700/10';
+
+        let contentHTML = '';
+
+        if (msg.fileData && msg.fileType) {
+            if (msg.fileType === 'image') {
+                contentHTML = `
+                <div class="p-1 max-w-[260px] cursor-pointer" id="bubble-${msg.id}" data-bubble-id="${msg.id}" data-raw-stream="${msg.fileData}" data-filename="${msg.fileName || 'Photo.png'}" onclick="openMediaLightbox('${msg.id}', 'image')">
+                    <img src="${msg.fileData}" class="rounded-lg object-cover max-h-[200px] w-full hover:opacity-90 transition">
+                </div>`;
+            } else if (msg.fileType === 'pdf') {
+                contentHTML = `
+                <div class="flex items-center space-x-3 bg-[#111a21]/40 p-3 rounded-lg border border-gray-700/30 max-w-[280px] cursor-pointer hover:bg-[#111a21]/70 transition" id="bubble-${msg.id}" data-bubble-id="${msg.id}" data-raw-stream="${msg.fileData}" data-filename="${msg.fileName || 'Document.pdf'}" onclick="openMediaLightbox('${msg.id}', 'pdf')">
+                    <i class="fas fa-file-pdf text-red-500 text-3xl shrink-0"></i>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-xs font-semibold truncate text-gray-200">${msg.fileName || 'Document.pdf'}</p>
+                        <p class="text-[10px] text-emerald-400 mt-0.5 font-medium"><i class="fas fa-eye mr-1"></i>Click to Open View</p>
+                    </div>
+                </div>`;
+            }
+        } else {
+            const cleanMessage = msg.message || "";
+            const isCode = /<[a-z][\s\S]*>/i.test(cleanMessage) || cleanMessage.includes('{') || cleanMessage.includes('function');
+
+            if (isCode) {
+                const escapedCode = cleanMessage.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                contentHTML = `
+                <div class="mt-1 mb-2 font-sans w-full min-w-[250px]">
+                    <div class="flex items-center justify-between bg-[#111a21] px-2 py-1.5 rounded-t text-xs text-gray-400 border-b border-gray-700/50 select-none">
+                        <span class="font-mono text-[11px] text-emerald-400"><i class="fas fa-code mr-1"></i> Source Frame</span>
+                        <button type="button" onclick="event.preventDefault(); event.stopPropagation(); toggleMessageMode('${msg.id}')" class="bg-[#00a884] text-[#111a21] font-bold px-2 py-0.5 rounded text-[10px]">Toggle View</button>
+                    </div>
+                    <pre id="code-view-${msg.id}" class="block bg-[#111a21] p-2.5 rounded-b text-amber-400 font-mono text-xs overflow-x-auto whitespace-pre-wrap max-h-[250px] select-text">${escapedCode}</pre>
+                    <div id="design-view-${msg.id}" class="hidden bg-white text-black p-3 rounded-b overflow-auto max-h-[250px] select-text">${cleanMessage}</div>
+                </div>`;
+            } else {
+                contentHTML = `<p class="pb-1 pr-8 whitespace-pre-wrap select-text text-[14.5px] leading-snug">${cleanMessage}</p>`;
+            }
+        }
+
+        msgRow.innerHTML = `
+        <div class="max-w-[85%] md:max-w-[70%] min-w-[100px] px-3 py-1.5 relative ${bubbleStyle}">
+            ${contentHTML}
+            <span class="absolute bottom-0.5 right-1.5 text-[9px] text-gray-400 select-none flex items-center space-x-0.5">
+                <span>${msg.time || ''}</span>
+                ${isSentByMe ? '<i class="fas fa-check-double text-sky-400 text-[10px]"></i>' : ''}
+            </span>
+        </div>`;
+
+        chatMessagesBox.appendChild(msgRow);
+        chatMessagesBox.scrollTop = chatMessagesBox.scrollHeight;
+    }
+
+    window.toggleMessageMode = function(msgId) {
+        const codeLayer = document.getElementById(`code-view-${msgId}`);
+        const designLayer = document.getElementById(`design-view-${msgId}`);
+        if (codeLayer && designLayer) {
+            if (codeLayer.classList.contains('block')) {
+                codeLayer.classList.replace('block', 'hidden'); designLayer.classList.replace('hidden', 'block');
+            } else {
+                designLayer.classList.replace('block', 'hidden'); codeLayer.classList.replace('hidden', 'block');
+            }
+        }
+    };
+
+    // ================= MESSAGE TRANSMISSION MECHANISM =================
+    function executeMessageTransmission() {
+        if (!chatInput) return;
+        const text = chatInput.value.trim();
+        if (!text || !activeChatPartner || !currentUser) return;
+
+        const uniquePacketId = 'id_msg_' + Date.now() + Math.random().toString(36).substr(2, 4);
+
+        const localPacket = {
+            sender: String(currentUser.mobile).trim(),
+            receiver: String(activeChatPartner.mobile).trim(),
+            message: text,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            id: uniquePacketId
+        };
+
+        appendMessageBubble(localPacket);
+        chatInput.value = ""; 
+
+        socket.emit('sendPrivateMessage', localPacket);
+        setTimeout(() => { if(chatInput) chatInput.focus(); }, 50);
+    }
+
+    function initMessagingEngine() {
+        if (!chatInput) return;
+        
+        // Use standard key event tracking to prevent frame refreshes completely
+        chatInput.onkeydown = function(e) {
+            if (e.keyCode === 13 || e.key === 'Enter') {
+                e.preventDefault(); 
+                e.stopPropagation();
+                executeMessageTransmission();
+                return false;
+            }
+        };
+
+        if (submitMsgBtn) {
+            submitMsgBtn.onclick = function(e) {
+                e.preventDefault(); 
+                e.stopPropagation();
+                executeMessageTransmission();
+                return false;
+            };
+        }
+    }
+
+    socket.on('connect', () => {
+        if (currentUser) socket.emit('join', String(currentUser.mobile).trim());
+    });
+    socket.on('reconnect', () => {
+        if (currentUser) socket.emit('join', String(currentUser.mobile).trim());
+    });
+
+    socket.on('newPrivateMessage', (incomingMsg) => {
+        if (!activeChatPartner || !currentUser || !incomingMsg) return;
+        
+        const s = String(incomingMsg.sender).trim();
+        const r = String(incomingMsg.receiver).trim();
+        const activePMob = String(activeChatPartner.mobile).trim();
+        const loggedMob = String(currentUser.mobile).trim();
+
+        if ((s === loggedMob && r === activePMob) || (s === activePMob && r === loggedMob)) {
+            appendMessageBubble(incomingMsg);
+        }
+    });
+
+    async function loadChatHistory() {
+        if (!currentUser || !activeChatPartner) return;
+        try {
+            const res = await fetch(`${API_BASE}/api/history?sender=${currentUser.mobile}&receiver=${activeChatPartner.mobile}`);
+            const currentLivePackets = await res.json();
+            if (Array.isArray(currentLivePackets)) {
+                currentLivePackets.forEach(msg => {
+                    if (msg) appendMessageBubble(msg);
+                });
+            }
+        } catch(e) { console.error("History engine track fault:", e); }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        if (currentUser) { initApplication(); } else { toggleAuthView(true); }
+    });
+
+    if (authToggleBtn) {
+        authToggleBtn.onclick = function() { isLoginView = !isLoginView; toggleAuthView(isLoginView); };
+    }
+
+    function toggleAuthView(isLogin) {
+        if(!authTitle || !nameField || !authBtn || !authToggleText || !authToggleBtn) return;
+        if (isLogin) {
+            authTitle.innerText = "Sign in to WhatsApp"; nameField.classList.add('hidden'); authBtn.innerText = "Log In";
+            authToggleText.innerText = "Don't have an account?"; authToggleBtn.innerText = "Register Now";
+        } else {
+            authTitle.innerText = "Create Account"; nameField.classList.remove('hidden'); authBtn.innerText = "Register";
+            authToggleText.innerText = "Already registered?"; authToggleBtn.innerText = "Log In Here";
+        }
+    }
+
+    if (authBtn) {
+        authBtn.onclick = async function(e) {
+            e.preventDefault(); e.stopPropagation();
+            const mobile = authMobile.value.trim(); const password = authPassword.value.trim(); const name = authName.value.trim();
+            if (!mobile || !password || (!isLoginView && !name)) return alert("Fields are mandatory!");
+
+            try {
+                const endpoint = isLoginView ? '/api/login' : '/api/register';
+                const res = await fetch(`${API_BASE}${endpoint}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(isLoginView ? { mobile, password } : { name, mobile, password })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    if (isLoginView) {
+                        currentUser = data.user; localStorage.setItem('whatsapp_user', JSON.stringify(currentUser));
+                        initApplication();
+                    } else { alert("Registered! Login now."); isLoginView = true; toggleAuthView(true); }
+                } else { alert(data.msg); }
+            } catch (err) { alert("Server connectivity fault issue!"); }
+        };
+    }
+
+    if (logoutBtn) {
+        logoutBtn.onclick = function() { localStorage.removeItem('whatsapp_user'); window.location.reload(); };
+    }
+
+    function initApplication() {
+        if (!currentUser) return;
+        if(authContainer) authContainer.classList.add('hidden'); 
+        if(appContainer) appContainer.classList.remove('hidden');
+        if(userDisplayName) userDisplayName.innerText = currentUser.name; 
+        if(userAvatar) userAvatar.innerText = currentUser.name.charAt(0);
+        socket.emit('join', String(currentUser.mobile).trim());
+        loadMyContacts();
+        initMessagingEngine();
+    }
+
+    if (addContactBtn) {
+        addContactBtn.onclick = async function(e) {
+            e.preventDefault(); e.stopPropagation();
+            const targetMobile = contactMobileInput.value.trim();
+            if (!targetMobile) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/add-contact`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userMobile: currentUser.mobile, contactMobile: targetMobile })
+                });
+                const data = await res.json(); alert(data.msg);
+                if (data.success) { contactMobileInput.value = ""; loadMyContacts(); }
+            } catch (err) {}
+        };
+    }
+
+    async function loadMyContacts() {
+        try {
+            const res = await fetch(`${API_BASE}/api/contacts/${currentUser.mobile}`);
+            const contacts = await res.json();
+
+            let activeSelection = activeChatPartner ? activeChatPartner.mobile : null;
+            if(!usersList) return;
+            usersList.innerHTML = "";
+            if (contacts.length === 0) {
+                usersList.innerHTML = `<div class="p-4 text-sm text-gray-500 text-center">No active chats.</div>`; return;
+            }
+            contacts.forEach(user => {
+                const item = document.createElement('div');
+                const isActive = activeSelection === user.mobile ? 'bg-[#2a3942]' : '';
+                item.className = `flex items-center px-4 py-3 hover:bg-[#202c33] cursor-pointer transition select-none border-b border-gray-800/20 ${isActive}`;
+                item.setAttribute('data-mobile', user.mobile);
+                item.innerHTML = `
+                <div class="w-11 h-11 bg-emerald-700 text-white flex items-center justify-center rounded-full font-bold uppercase shrink-0 shadow-sm">${user.name.charAt(0)}</div>
+                <div class="flex-1 ml-3 overflow-hidden">
+                    <h4 class="text-gray-200 text-sm font-medium truncate">${user.name}</h4>
+                    <p class="text-xs text-gray-400 truncate mt-0.5">${user.mobile}</p>
+                </div>`;
+                item.onclick = function(e) {
+                    e.preventDefault(); e.stopPropagation();
+                    switchActiveChat(user);
+                };
+                usersList.appendChild(item);
+            });
+        } catch (err) {}
+    }
+
+    async function switchActiveChat(targetUser) {
+        if (!targetUser) return;
+        activeChatPartner = targetUser; 
+        
+        if (chatWelcome) chatWelcome.classList.add('hidden');
+        if (chatPanel) {
+            chatPanel.classList.remove('hidden');
+            chatPanel.classList.add('flex');
+        }
+
+        if (activeChatName) activeChatName.innerText = targetUser.name; 
+        if (activeChatAvatar) activeChatAvatar.innerText = targetUser.name.charAt(0);
+
+        document.querySelectorAll('#users-list > div').forEach(node => {
+            if(node.getAttribute('data-mobile') === targetUser.mobile) node.classList.add('bg-[#2a3942]');
+            else node.classList.remove('bg-[#2a3942]');
+        });
+
+        if (window.innerWidth < 768) {
+            if(sidebarPanel) sidebarPanel.classList.add('hidden');
+        }
+
+        if(chatMessagesBox) chatMessagesBox.innerHTML = "";
+        RENDERING_TRACKER_IDS.clear();
+
+        await loadChatHistory();
+        if (chatInput) chatInput.focus();
+    }
+
+    if (mobileBackBtn) {
+        mobileBackBtn.onclick = function(e) {
+            e.preventDefault(); e.stopPropagation();
+            activeChatPartner = null; 
+            if (chatPanel) chatPanel.classList.replace('flex', 'hidden'); 
+            if (sidebarPanel) sidebarPanel.classList.remove('hidden');
+        };
+    }
+</script>
+</body>
+</html>
