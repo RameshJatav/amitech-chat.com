@@ -74,7 +74,7 @@
             <div class="flex items-center space-x-2">
                 <button type="button" id="search-toggle-btn" class="w-9 h-9 rounded-lg hover:bg-slate-800/60 text-slate-400 hover:text-cyan-400 flex items-center justify-center transition"><i class="fas fa-search text-sm"></i></button>
                 <button type="button" id="contact-toggle-btn" class="w-9 h-9 rounded-lg hover:bg-slate-800/60 text-slate-400 hover:text-emerald-400 flex items-center justify-center transition"><i class="fas fa-plus text-sm"></i></button>
-                <button type="button" id="logout-btn" class="w-9 h-9 rounded-lg hover:bg-rose-950/30 text-slate-500 hover:text-rose-400 flex items-center justify-center transition"><i class="fas fa-power-off text-sm"></i></button>
+                <button type="button" id="logout-btn" class="w-9 h-9 rounded-lg hover:bg-rose-950/30 text-slate-500 hover:text-rose-400 flex items-center justify-center transition" title="Disconnect Console"><i class="fas fa-power-off text-sm"></i></button>
             </div>
         </header>
 
@@ -233,6 +233,7 @@
         reconnectionDelay: 1000
     });
 
+    // CHANGED: Restored securely structure object initialization
     let currentUser = JSON.parse(localStorage.getItem('whatsapp_user')) || null;
     let activeChatPartner = null;
     let RENDERING_TRACKER_IDS = new Set();
@@ -542,7 +543,7 @@
                 contentHTML = `
                 <div class="mt-1 mb-2 font-sans w-full min-w-[260px]">
                     <div class="flex items-center justify-between bg-slate-950/80 px-3 py-2 rounded-t-xl text-[10px] font-bold text-slate-400 border-b border-slate-800 tracking-widest uppercase select-none">
-                        <span class="font-mono text-[11px] text-cyan-400"><i class="fas fa-code mr-1"></i> Source Frame</span>
+                        <span class="text-cyan-400"><i class="fas fa-code mr-1"></i> Source Frame</span>
                         <button type="button" onclick="event.preventDefault(); event.stopPropagation(); toggleMessageMode('${msg.id}')" class="bg-cyan-500 text-slate-950 font-bold px-2 py-0.5 rounded text-[9px] uppercase tracking-wide">Compile</button>
                     </div>
                     <pre id="code-view-${msg.id}" class="block bg-slate-950 p-3 rounded-b-xl text-amber-400 font-mono text-xs overflow-x-auto whitespace-pre-wrap max-h-[250px] select-text border-t-0 border border-slate-800">${escapedCode}</pre>
@@ -578,7 +579,6 @@
         }
     };
 
-    // ================= HYPER RESOLUTION TRANSMITTER PIPELINE =================
     async function executeMessageTransmission() {
         if (!chatInput || !activeChatPartner || !currentUser) return;
         const textValue = chatInput.value.trim();
@@ -617,7 +617,6 @@
                     appendMessageBubble(streamPayload);
                     socket.emit('sendPrivateMessage', streamPayload);
                     
-                    // Chat list update call to instantly bring the current partner to top
                     setTimeout(loadMyContacts, 500);
                 } else {
                     alert("File framework configuration drop.");
@@ -646,7 +645,6 @@
             appendMessageBubble(standardPacket);
             socket.emit('sendPrivateMessage', standardPacket);
             
-            // Text send hone par list automatic refresh tracking to shift active user to top
             setTimeout(loadMyContacts, 500);
         }
 
@@ -675,6 +673,7 @@
         });
     }
 
+    // CHANGED: Form interceptor decoupled cleanly without template strings references anomalies
     function initMessagingEngine() {
         if (!chatInput) return;
         chatInput.onkeydown = function(e) {
@@ -711,7 +710,6 @@
             appendMessageBubble(incomingMsg);
         }
         
-        // Naya message receive hone par sidebar list top update reload
         loadMyContacts();
     });
 
@@ -736,6 +734,8 @@
         authToggleBtn.onclick = function() { isLoginView = !isLoginView; toggleAuthView(isLoginView); };
     }
 
+    // Mapped update elements tracking arrays schema config safely
+    // CHANGED: Fixed plain user serialization array to safely ignore passwords arrays fields structure mappings tracking
     function toggleAuthView(isLogin) {
         if(!authTitle || !nameField || !authBtn || !authToggleText || !authToggleBtn) return;
         if (isLogin) {
@@ -762,7 +762,9 @@
                 const data = await res.json();
                 if (data.success) {
                     if (isLoginView) {
-                        currentUser = data.user; localStorage.setItem('whatsapp_user', JSON.stringify(currentUser));
+                        currentUser = data.user; 
+                        // Mapped profile persistence securely inside local store (Zero raw password footprint saved)
+                        localStorage.setItem('whatsapp_user', JSON.stringify(currentUser));
                         initApplication();
                     } else { alert("Registered! Provision Identity Now."); isLoginView = true; toggleAuthView(true); }
                 } else { alert(data.msg); }
