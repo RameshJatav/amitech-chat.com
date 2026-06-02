@@ -22,8 +22,71 @@
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
         .glow-sphere { filter: blur(150px); opacity: 0.12; pointer-events: none; position: absolute; }
         .safe-message-text { word-break: break-word !important; overflow-wrap: break-word !important; white-space: pre-wrap !important; }
+   
+    .notification {
+    min-width: 320px;
+    max-width: 420px;
+    padding: 14px 18px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    animation: slideIn .35s ease;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+
+.notification.success {
+    background: linear-gradient(135deg,#10b981,#059669);
+    border-left: 4px solid #6ee7b7;
+}
+
+.notification.error {
+    background: linear-gradient(135deg,#ef4444,#b91c1c);
+    border-left: 4px solid #fca5a5;
+}
+
+.notification .close-btn {
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.notification.hide {
+    animation: slideOut .35s ease forwards;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+    
     </style>
 </head>
+<!-- Notification Container -->
+<div id="notification-container"
+     class="fixed top-5 right-5 z-[99999] space-y-3">
+</div>
+
 <body class="w-full h-full flex items-center justify-center text-slate-200 relative overflow-hidden antialiased">
 
 <div class="top-[-15%] left-[-15%] w-[60vw] h-[60vw] rounded-full bg-cyan-500 glow-sphere"></div>
@@ -347,7 +410,7 @@
     if(saveProfileModalBtn) {
         saveProfileModalBtn.onclick = async function() {
             const updatedName = settingsNameInput.value.trim();
-            if(!updatedName) return alert("Operator name cannot remain blank.");
+            if(!updatedName) return showPopup("Operator name cannot remain blank.");
 
             try {
                 const res = await fetch(`${API_BASE}/api/update-profile`, {
@@ -363,7 +426,7 @@
                     profileSettingsModal.classList.remove('active');
                     loadMyContacts();
                 }
-            } catch(e) { alert("Profile modification failure."); }
+            } catch(e) { showPopup("Profile modification failure."); }
         };
     }
 
@@ -385,7 +448,7 @@
     if(saveAliasModalBtn) {
         saveAliasModalBtn.onclick = async function() {
             const targetAliasValue = settingsAliasInput.value.trim();
-            if(!targetAliasValue) return alert("Alias entry value parameter empty.");
+            if(!targetAliasValue) return showPopup("Alias entry value parameter empty.");
 
             try {
                 const res = await fetch(`${API_BASE}/api/update-alias`, {
@@ -401,7 +464,7 @@
                     aliasSettingsModal.classList.remove('active');
                     loadMyContacts();
                 }
-            } catch(e) { alert("Alias commit processing failure."); }
+            } catch(e) { showPopup("Alias commit processing failure."); }
         };
     }
 
@@ -619,10 +682,10 @@
                     
                     setTimeout(loadMyContacts, 500);
                 } else {
-                    alert("File framework configuration drop.");
+                    showPopup("File framework configuration drop.");
                 }
             } catch (err) {
-                alert("File upload error.");
+                showPopup("File upload error.");
             }
 
             STAGED_FILE_RAW = null;
@@ -751,7 +814,7 @@
         authBtn.onclick = async function(e) {
             e.preventDefault(); e.stopPropagation();
             const mobile = authMobile.value.trim(); const password = authPassword.value.trim(); const name = authName.value.trim();
-            if (!mobile || !password || (!isLoginView && !name)) return alert("Fields are mandatory!");
+            if (!mobile || !password || (!isLoginView && !name)) return showPopup("Fields are mandatory!");
 
             try {
                 const endpoint = isLoginView ? '/api/login' : '/api/register';
@@ -766,9 +829,9 @@
                         // Mapped profile persistence securely inside local store (Zero raw password footprint saved)
                         localStorage.setItem('whatsapp_user', JSON.stringify(currentUser));
                         initApplication();
-                    } else { alert("Registered! Provision Identity Now."); isLoginView = true; toggleAuthView(true); }
-                } else { alert(data.msg); }
-            } catch (err) { alert("Core Node Connectivity Fault!"); }
+                    } else { showPopup("Registered! Provision Identity Now."); isLoginView = true; toggleAuthView(true); }
+                } else { showPopup(data.msg); }
+            } catch (err) { showPopup("Core Node Connectivity Fault!"); }
         };
     }
 
@@ -797,7 +860,7 @@
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ userMobile: currentUser.mobile, contactMobile: targetMobile })
                 });
-                const data = await res.json(); alert(data.msg);
+                const data = await res.json(); showPopup(data.msg);
                 if (data.success) { 
                     contactMobileInput.value = ""; 
                     if(contactDockContainer) contactDockContainer.classList.add('hidden');
@@ -884,6 +947,55 @@
             if (sidebarPanel) sidebarPanel.classList.remove('hidden');
         };
     }
+
+    function showPopup(message, type = "success") {
+
+    const container =
+        document.getElementById(
+            "notification-container"
+        );
+
+    const popup =
+        document.createElement("div");
+
+    popup.className =
+        `notification ${type}`;
+
+    popup.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;">
+            <i class="fas ${
+                type === "success"
+                ? "fa-circle-check"
+                : "fa-circle-xmark"
+            }"></i>
+
+            <span>${message}</span>
+        </div>
+
+        <span class="close-btn">
+            <i class="fas fa-times"></i>
+        </span>
+    `;
+
+    container.appendChild(popup);
+
+    const removePopup = () => {
+        popup.classList.add("hide");
+
+        setTimeout(() => {
+            popup.remove();
+        }, 350);
+    };
+
+    popup.querySelector(".close-btn")
+         .addEventListener(
+             "click",
+             removePopup
+         );
+
+    setTimeout(removePopup, 5000);
+}
+
 </script>
 </body>
 </html>
